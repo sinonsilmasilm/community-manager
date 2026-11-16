@@ -1,0 +1,96 @@
+:root {
+  --bg: #0f1115;
+  --card: #171a21;
+  --border: #272b35;
+  --text: #e9ebf0;
+  --muted: #8a8f9c;
+  --accent: #5865f2;
+  --accent-hover: #4752c4;
+  --danger: #ed4245;
+  --success: #57f287;
+  --radius: 10px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  min-height: 100vh;
+}
+
+html[dir="rtl"] body { font-family: "Segoe UI", Tahoma, "Noto Sans Arabic", sans-serif; }
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar h1 { font-size: 1.2rem; margin: 0; }
+.muted { color: var(--muted); font-size: 0.85rem; }
+
+main { max-width: 720px; margin: 24px auto; padding: 0 16px; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.card h2 { font-size: 1rem; margin: 18px 0 10px; color: var(--accent); }
+.card h2:first-child { margin-top: 0; }
+
+label { display: block; font-size: 0.85rem; margin: 10px 0 4px; color: var(--muted); }
+
+input[type="text"], input[type="password"], input[type="number"], textarea {
+  width: 100%;
+  background: #0f1115;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 9px 10px;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+textarea { resize: vertical; }
+
+.checkbox-row { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
+.checkbox-row input { width: auto; }
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.primary-btn, .ghost-btn {
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 9px 16px;
+  font-size: 0.9rem;
+  border: 1px solid var(--accent);
+}
+
+.primary-btn { background: var(--accent); color: white; margin-top: 16px; }
+.primary-btn:hover { background: var(--accent-hover); }
+.ghost-btn { background: transparent; color: var(--text); }
+
+.actions { display: flex; align-items: center; gap: 12px; }
+
+.error { color: var(--danger); font-size: 0.85rem; min-height: 1.2em; }
+
+.status-row { display: flex; gap: 10px; margin-bottom: 12px; }
+.badge {
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #0f1115;
+  border: 1px solid var(--border);
+}
+
+.hidden { display: none; }
+
+footer { max-width: 720px; margin: 0 auto 40px; padding: 0 16px; font-size: 0.8rem; }

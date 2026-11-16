@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Community Manager — Dashboard</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>🤖 Community Manager <span class="muted">Dashboard</span></h1>
+    <button id="langToggle" class="ghost-btn">English</button>
+  </header>
+
+  <main id="app">
+    <section id="authCard" class="card">
+      <h2 data-i18n="connect_title">الاتصال</h2>
+      <label data-i18n="guild_id_label">معرّف السيرفر (Guild ID)</label>
+      <input id="guildIdInput" type="text" placeholder="123456789012345678" />
+      <label data-i18n="token_label">رمز لوحة التحكم (Admin Token)</label>
+      <input id="tokenInput" type="password" placeholder="ADMIN_DASHBOARD_TOKEN" />
+      <button id="connectBtn" class="primary-btn" data-i18n="connect_btn">اتصال</button>
+      <p id="authError" class="error"></p>
+    </section>
+
+    <section id="dashCard" class="card hidden">
+      <div class="status-row">
+        <span id="aiStatusBadge" class="badge">AI: …</span>
+        <span id="persistBadge" class="badge">Storage: …</span>
+      </div>
+
+      <h2 data-i18n="welcome_section">إعدادات الترحيب</h2>
+      <label data-i18n="welcome_channel">قناة الترحيب (Channel ID)</label>
+      <input id="welcomeChannelId" type="text" />
+      <label data-i18n="welcome_msg">رسالة الترحيب المخصصة</label>
+      <textarea id="welcomeMessage" rows="2"></textarea>
+      <label data-i18n="auto_role">الرتبة التلقائية (Role ID)</label>
+      <input id="autoRoleId" type="text" />
+
+      <h2 data-i18n="mod_section">إعدادات الإشراف</h2>
+      <label data-i18n="mod_log_channel">قناة سجلات الإشراف (Channel ID)</label>
+      <input id="modLogChannelId" type="text" />
+      <label class="checkbox-row"><input type="checkbox" id="spamEnabled" /> <span data-i18n="spam_enabled">تفعيل كشف السبام</span></label>
+      <div class="grid2">
+        <div><label data-i18n="spam_threshold">عدد الرسائل</label><input id="spamMessageThreshold" type="number" min="1" /></div>
+        <div><label data-i18n="spam_window">خلال (ثواني)</label><input id="spamWindowSeconds" type="number" min="1" /></div>
+      </div>
+      <div class="grid2">
+        <div><label data-i18n="repeat_threshold">تكرار الرسالة نفسها</label><input id="repeatedMessageThreshold" type="number" min="1" /></div>
+        <div><label data-i18n="mention_threshold">حد الإشارات (Mentions)</label><input id="mentionAbuseThreshold" type="number" min="1" /></div>
+      </div>
+      <label class="checkbox-row"><input type="checkbox" id="linkFilterEnabled" /> <span data-i18n="link_filter">تفعيل فلترة الروابط</span></label>
+      <label data-i18n="allowed_domains">النطاقات المسموحة (مفصولة بفاصلة)</label>
+      <input id="allowedLinkDomains" type="text" placeholder="youtube.com, discord.gg" />
+      <label data-i18n="banned_words">الكلمات الممنوعة (مفصولة بفاصلة)</label>
+      <textarea id="bannedWords" rows="2"></textarea>
+      <label data-i18n="warn_threshold">عدد التحذيرات قبل التصعيد</label>
+      <input id="warnThreshold" type="number" min="1" />
+
+      <div class="actions">
+        <button id="saveBtn" class="primary-btn" data-i18n="save_btn">حفظ التغييرات</button>
+        <span id="saveStatus" class="muted"></span>
+      </div>
+    </section>
+  </main>
+
+  <footer class="muted">
+    <p data-i18n="footer_note">
+      هذه اللوحة تتحكم في إعدادات الترحيب والإشراف المخزّنة في قاعدة البيانات. ميزات مثل كشف السبام الفعلي والترحيب التلقائي تتطلب تشغيل "Gateway Worker" (راجع README).
+    </p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

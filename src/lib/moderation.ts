@@ -1,0 +1,116 @@
+import { GuildConfig, WarningRecord } from "../types.js";
+import { kvGet, kvListPush } from "./storage.js";
+
+export type ModerationFlagReason =
+  | "spam_rate"
+  | "repeated_message"
+  | "mention_abuse"
+  | "banned_word"
+  | "unapproved_link";
+
+export interface ModerationFlag {
+  reason: ModerationFlagReason;
+  detail: string;
+}
+
+interface UserActivity {
+  recentTimestamps: number[]; // ms epoch, for rate detection
+  lastMessages: string[]; // for repeated-message detection
+}
+
+// Per-process memory of recent activity, keyed by `${guildId}:${userId}`.
+// This only needs to live for the duration of the gateway worker process.
+const activityMap = new Map<string, UserActivity>();
+
+function getActivity(key: string): UserActivity {
+  let a = activityMap.get(key);
+  if (!a) {
+    a = { recentTimestamps: [], lastMessages: [] };
+    activityMap.set(key, a);
+  }
+  return a;
+}
+
+/**
+ * Evaluates a single message against configurable moderation rules.
+ * Returns a list of flags (possibly empty). Multiple flags can fire at once.
+ * This function NEVER decides punishment — callers must apply the server's
+ * configured, human-reviewable escalation policy (warn → notify mods →
+ * human decides on timeout/kick/ban). See /mod command and warnThreshold.
+ */
+export function evaluateMessage(
+  config: GuildConfig,
+  guildId: string,
+  userId: string,
+  content: string,
+  mentionCount: number
+): ModerationFlag[] {
+  const flags: ModerationFlag[] = [];
+  const mod = config.moderation;
+  const key = `${guildId}:${userId}`;
+  const activity = getActivity(key);
+  const now = Date.now();
+
+  if (mod.spamEnabled) {
+    activity.recentTimestamps.push(now);
+    const windowMs = mod.spamWindowSeconds * 1000;
+    activity.recentTimestamps = activity.recentTimestamps.filter((t) => now - t <= windowMs);
+    if (activity.recentTimestamps.length > mod.spamMessageThreshold) {
+      flags.push({
+        reason: "spam_rate",
+        detail: `${activity.recentTimestamps.length} messages in ${mod.spamWindowSeconds}s`,
+      });
+    }
+
+    activity.lastMessages.push(content.trim().toLowerCase());
+    if (activity.lastMessages.length > mod.repeatedMessageThreshold) {
+      activity.lastMessages.shift();
+    }
+    if (
+      activity.lastMessages.length === mod.repeatedMessageThreshold &&
+      activity.lastMessages.every((m) => m === activity.lastMessages[0] && m.length > 0)
+    ) {
+      flags.push({
+        reason: "repeated_message",
+        detail: `Same message repeated ${mod.repeatedMessageThreshold}x`,
+      });
+    }
+  }
+
+  if (mentionCount >= mod.mentionAbuseThreshold) {
+    flags.push({ reason: "mention_abuse", detail: `${mentionCount} mentions in one message` });
+  }
+
+  const lowerContent = content.toLowerCase();
+  for (const word of mod.bannedWords) {
+    if (word && lowerContent.includes(word.toLowerCase())) {
+      flags.push({ reason: "banned_word", detail: `Contains filtered term` });
+      break;
+    }
+  }
+
+  if (mod.linkFilterEnabled) {
+    const urls = content.match(/https?:\/\/([^\s/]+)/gi) || [];
+    for (const url of urls) {
+      const domainMatch = url.match(/https?:\/\/([^\s/]+)/i);
+      const domain = domainMatch?.[1]?.toLowerCase().replace(/^www\./, "");
+      if (domain && !mod.allowedLinkDomains.some((d) => domain.endsWith(d.toLowerCase()))) {
+        flags.push({ reason: "unapproved_link", detail: `Link to unapproved domain: ${domain}` });
+        break;
+      }
+    }
+  }
+
+  return flags;
+}
+
+export async function recordWarning(warning: WarningRecord): Promise<number> {
+  const key = `warnings:${warning.guildId}:${warning.userId}`;
+  await kvListPush(key, warning, 200);
+  const all = (await kvGet<WarningRecord[]>(key)) ?? [];
+  return all.length;
+}
+
+export async function getWarnings(guildId: string, userId: string): Promise<WarningRecord[]> {
+  return (await kvGet<WarningRecord[]>(`warnings:${guildId}:${userId}`)) ?? [];
+}

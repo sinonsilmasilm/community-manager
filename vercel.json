@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "functions": {
+    "api/interactions.ts": { "maxDuration": 15 },
+    "api/dashboard-api.ts": { "maxDuration": 10 }
+  },
+  "routes": [
+    { "src": "/api/interactions", "dest": "/api/interactions.ts" },
+    { "src": "/dashboard", "dest": "/public/dashboard/index.html" },
+    { "src": "/dashboard/(.*)", "dest": "/public/dashboard/$1" }
+  ]
+}

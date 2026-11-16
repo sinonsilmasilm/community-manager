@@ -1,0 +1,35 @@
+{
+  "name": "community-manager",
+  "version": "1.0.0",
+  "description": "Autonomous AI-powered Discord community management bot (Community Manager)",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --loader ts-node/esm --test tests/*.test.ts",
+    "register-commands": "node --loader ts-node/esm scripts/register-commands.ts",
+    "register-commands:guild": "node --loader ts-node/esm scripts/register-commands.ts --guild",
+    "gateway": "node --loader ts-node/esm src/gateway/bot.ts",
+    "gateway:build": "tsc -p tsconfig.json && node dist/gateway/bot.js",
+    "dev:vercel": "vercel dev"
+  },
+  "dependencies": {
+    "@vercel/functions": "^1.5.0",
+    "discord-api-types": "^0.37.90",
+    "discord.js": "^14.28.1",
+    "dotenv": "^18.0.10",
+    "tweetnacl": "^1.0.3",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "@vercel/node": "^3.1.7",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.23.15",
+    "typescript": "^5.5.3"
+  }
+}
