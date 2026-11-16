@@ -1,4 +1,4 @@
-// Groq API - Dynamic model selection (2026)
+// Groq API - Smart model selection (excludes classification models)
 const KEY: string = process.env.GROQ_API_KEY || "";
 const URL_CHAT = "https://api.groq.com/openai/v1/chat/completions";
 const URL_MODELS = "https://api.groq.com/openai/v1/models";
@@ -11,7 +11,40 @@ const SYSTEM_PERSONA = "Be concise and helpful. Answer in the user's language.";
 let CURRENT_MODEL: string = "";
 let modelsFetched = false;
 
-// جلب النماذج المتاحة من Groq واختيار أول واحد صالح
+// قائمة النماذج المفضلة بالترتيب (الأفضل أولاً)
+const PREFERRED_MODELS = [
+  "llama-3.3-70b-specdec",
+  "llama-3.3-70b-versatile",
+  "llama-3.1-70b-versatile",
+  "deepseek-r1-distill-llama-70b",
+  "qwen-qwq-32b",
+  "mixtral-8x7b-32768",
+  "gemma2-9b-it",
+  "llama-3.1-8b-instant",
+  "llama3-8b-8192",
+  "llama3-70b-8192"
+];
+
+// كلمات مفتاحية لاستبعاد النماذج غير المناسبة للمحادثة
+const EXCLUDED_KEYWORDS = [
+  "guard",
+  "prompt-guard",
+  "classification",
+  "embed",
+  "whisper",
+  "distil"
+];
+
+function isChatModel(modelId: string): boolean {
+  const lower = modelId.toLowerCase();
+  // استبعاد النماذج غير المناسبة
+  for (const keyword of EXCLUDED_KEYWORDS) {
+    if (lower.includes(keyword)) return false;
+  }
+  return true;
+}
+
+// جلب النماذج المتاحة واختيار الأفضل
 async function selectWorkingModel(): Promise<string> {
   if (!KEY) throw new Error("GROQ_API_KEY is not set");
   
@@ -27,18 +60,32 @@ async function selectWorkingModel(): Promise<string> {
     }
     
     const data = await res.json() as any;
-    const availableModels: string[] = (data.data || [])
-      .map((m: any) => m.id as string)
-      .filter((id: string) => id.includes("llama") || id.includes("mixtral") || id.includes("gemma") || id.includes("deepseek") || id.includes("qwen"));
+    const allModels: string[] = (data.data || []).map((m: any) => m.id as string);
     
-    console.log(`[AI] Found ${availableModels.length} available models`);
+    // فلترة: نحتفظ فقط بنماذج المحادثة
+    const chatModels = allModels.filter(isChatModel);
     
-    if (availableModels.length === 0) {
-      throw new Error("No suitable models available");
+    console.log(`[AI] Total models: ${allModels.length}, Chat models: ${chatModels.length}`);
+    
+    if (chatModels.length === 0) {
+      throw new Error("No chat models available");
     }
     
-    // اختر أول نموذج متاح
-    CURRENT_MODEL = availableModels[0];
+    // ابحث عن أول نموذج مفضل متاح
+    let selected: string | null = null;
+    for (const preferred of PREFERRED_MODELS) {
+      if (chatModels.includes(preferred)) {
+        selected = preferred;
+        break;
+      }
+    }
+    
+    // إلا ما لقينا والو من المفضلة، خذ أول نموذج محادثة متاح
+    if (!selected) {
+      selected = chatModels[0];
+    }
+    
+    CURRENT_MODEL = selected;
     console.log(`[AI] Selected model: ${CURRENT_MODEL}`);
     modelsFetched = true;
     
@@ -59,7 +106,6 @@ function getCacheKey(messages: ChatMessage[]): string {
 export async function askAI(messages: ChatMessage[], maxTokens: number = 512, retries: number = 2): Promise<string> {
   if (!KEY) throw new Error("GROQ_API_KEY is not set");
   
-  // جلب النموذج الصالح أولاً
   const model = await selectWorkingModel();
   
   const cacheKey = getCacheKey(messages);
@@ -101,6 +147,14 @@ export async function askAI(messages: ChatMessage[], maxTokens: number = 512, re
         const t = await res.text().catch(() => "");
         const err = new Error(`Groq ${res.status}: ${t.slice(0, 200)}`);
         
+        // إذا النموذج ما خدمش، امسح الـ cache وجرب مرة أخرى (غادي يختار نموذج آخر)
+        if ((res.status === 400 || res.status === 404) && attempt < retries) {
+          modelsFetched = false;
+          CURRENT_MODEL = "";
+          lastError = err;
+          continue;
+        }
+        
         if (res.status === 429 || res.status >= 500) {
           lastError = err;
           if (attempt < retries) {
@@ -138,7 +192,8 @@ export async function askAI(messages: ChatMessage[], maxTokens: number = 512, re
 export async function getAiStatus(): Promise<AiStatus> {
   const configured: boolean = Boolean(KEY);
   try {
-    modelsFetched = false; // إعادة جلب النماذج
+    modelsFetched = false;
+    CURRENT_MODEL = "";
     await askAI([{ role: "user", content: "Say ping" }], 200);
     return { configured, model: CURRENT_MODEL, reachable: true };
   } catch (e: any) {
