@@ -1,7 +1,7 @@
-// Gemini with robust retry logic for slow connections
-const MODEL = process.env.AI_MODEL || "gemini-3.8-flash";
-const KEY = process.env.GEMINI_API_KEY || "";
-const URL_CHAT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${KEY}`;
+// Groq API - Free, fast, no quota issues
+const MODEL = process.env.AI_MODEL || "llama-3.1-70b-versatile";
+const KEY = process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY || "";
+const URL_CHAT = "https://api.groq.com/openai/v1/chat/completions";
 
 export interface ChatMessage { role: "system" | "user" | "assistant"; content: string; }
 export interface AiStatus { configured: boolean; model: string; reachable: boolean; error?: string; }
@@ -15,8 +15,8 @@ function getCacheKey(messages: ChatMessage[]): string {
   return messages.map(m => `${m.role}:${m.content}`).join("|");
 }
 
-export async function askAI(messages: ChatMessage[], maxTokens = 512, retries = 3): Promise<string> {
-  if (!KEY) throw new Error("GEMINI_API_KEY is not set");
+export async function askAI(messages: ChatMessage[], maxTokens = 512, retries = 2): Promise<string> {
+  if (!KEY) throw new Error("GROQ_API_KEY is not set");
   
   const cacheKey = getCacheKey(messages);
   const cached = cache.get(cacheKey);
@@ -24,43 +24,29 @@ export async function askAI(messages: ChatMessage[], maxTokens = 512, retries = 
     return cached.response;
   }
   
-  const contents = messages.map(m => ({
-    role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }],
-  }));
-  
-  contents.unshift({
-    role: "user" as const,
-    parts: [{ text: SYSTEM_PERSONA }],
-  });
-  
   const body = JSON.stringify({
-    contents,
-    generationConfig: {
-      maxOutputTokens: maxTokens,
-      temperature: 0.3,
-      topP: 0.8,
-      topK: 20,
-    },
-    safetySettings: [
-      { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-      { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-      { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-      { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+    model: MODEL,
+    messages: [
+      { role: "system", content: SYSTEM_PERSONA },
+      ...messages.map(m => ({ role: m.role, content: m.content })),
     ],
+    max_tokens: maxTokens,
+    temperature: 0.3,
   });
   
   let lastError: Error | null = null;
   
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      // Timeout 30 ثانية (كافي للمغرب)
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 30000);
       
       const res = await fetch(URL_CHAT, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${KEY}`,
+        },
         body,
         signal: controller.signal,
       });
@@ -69,12 +55,12 @@ export async function askAI(messages: ChatMessage[], maxTokens = 512, retries = 
       
       if (!res.ok) {
         const t = await res.text().catch(() => "");
-        const err = new Error(`Gemini ${res.status}: ${t.slice(0, 200)}`);
+        const err = new Error(`Groq ${res.status}: ${t.slice(0, 200)}`);
         
         if (res.status === 429 || res.status >= 500) {
           lastError = err;
           if (attempt < retries) {
-            const wait = 2000 * Math.pow(2, attempt); // 2s, 4s, 8s
+            const wait = 2000 * Math.pow(2, attempt);
             console.log(`[AI] Retry ${attempt + 1}/${retries} after ${wait}ms`);
             await new Promise(r => setTimeout(r, wait));
             continue;
@@ -84,21 +70,19 @@ export async function askAI(messages: ChatMessage[], maxTokens = 512, retries = 
       }
       
       const data: any = await res.json();
-      const content = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      const content = data?.choices?.[0]?.message?.content;
       
       if (!content) {
-        const reason = data?.candidates?.[0]?.finishReason || "unknown";
-        throw new Error(`No content (reason: ${reason})`);
+        throw new Error("No content in response");
       }
       
       cache.set(cacheKey, { response: content, time: Date.now() });
       return content;
     } catch (e: any) {
       lastError = e;
-      // AbortError = timeout، نعيد المحاولة
       if (attempt < retries && (e.name === "AbortError" || e.message.includes("429") || e.message.includes("5"))) {
         const wait = 2000 * Math.pow(2, attempt);
-        console.log(`[AI] Retry ${attempt + 1}/${retries} after ${wait}ms (${e.name || e.message.slice(0, 50)})`);
+        console.log(`[AI] Retry ${attempt + 1}/${retries} after ${wait}ms`);
         await new Promise(r => setTimeout(r, wait));
         continue;
       }
