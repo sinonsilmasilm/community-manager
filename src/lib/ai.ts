@@ -1,35 +1,34 @@
-// Groq API with fallback models
-const KEY = process.env.GROQ_API_KEY || "";
+// Groq API with fallback models - TypeScript fixed
+const KEY: string = process.env.GROQ_API_KEY || "";
 const URL_CHAT = "https://api.groq.com/openai/v1/chat/completions";
 
-// قائمة النماذج بالترتيب (الأفضل أولاً)
-const MODELS = [
+const MODELS: string[] = [
   "llama-3.3-70b-versatile",
-  "llama-3.1-70b-versatile", 
+  "llama-3.1-70b-versatile",
   "llama3-70b-8192",
   "mixtral-8x7b-32768",
   "gemma2-9b-it",
   "llama-3.1-8b-instant"
 ];
 
-let CURRENT_MODEL = MODELS[0];
+let CURRENT_MODEL: string = process.env.AI_MODEL || MODELS[0];
 
 export interface ChatMessage { role: "system" | "user" | "assistant"; content: string; }
 export interface AiStatus { configured: boolean; model: string; reachable: boolean; error?: string; }
 
-const SYSTEM_PERSONA = "Be concise and helpful. Answer in the user's language.";
+const SYSTEM_PERSONA: string = "Be concise and helpful. Answer in the user's language.";
 
 const cache = new Map<string, { response: string; time: number }>();
-const CACHE_TTL = 10 * 60 * 1000;
+const CACHE_TTL: number = 10 * 60 * 1000;
 
 function getCacheKey(messages: ChatMessage[]): string {
   return messages.map(m => `${m.role}:${m.content}`).join("|");
 }
 
-export async function askAI(messages: ChatMessage[], maxTokens = 512, retries = 2): Promise<string> {
+export async function askAI(messages: ChatMessage[], maxTokens: number = 512, retries: number = 2): Promise<string> {
   if (!KEY) throw new Error("GROQ_API_KEY is not set");
   
-  const cacheKey = getCacheKey(messages);
+  const cacheKey: string = getCacheKey(messages);
   const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.time < CACHE_TTL) {
     return cached.response;
@@ -68,7 +67,6 @@ export async function askAI(messages: ChatMessage[], maxTokens = 512, retries = 
         const t = await res.text().catch(() => "");
         const err = new Error(`Groq ${res.status}: ${t.slice(0, 200)}`);
         
-        // إذا النموذج ما لقييناه، جرب النموذج التالي
         if (res.status === 404 && attempt === 0) {
           const currentIndex = MODELS.indexOf(CURRENT_MODEL);
           if (currentIndex < MODELS.length - 1) {
@@ -91,7 +89,7 @@ export async function askAI(messages: ChatMessage[], maxTokens = 512, retries = 
       }
       
       const data: any = await res.json();
-      const content = data?.choices?.[0]?.message?.content;
+      const content: string = data?.choices?.[0]?.message?.content || "";
       
       if (!content) {
         throw new Error("No content in response");
@@ -114,7 +112,7 @@ export async function askAI(messages: ChatMessage[], maxTokens = 512, retries = 
 }
 
 export async function getAiStatus(): Promise<AiStatus> {
-  const configured = Boolean(KEY);
+  const configured: boolean = Boolean(KEY);
   try {
     await askAI([{ role: "user", content: "Say ping" }], 200);
     return { configured, model: CURRENT_MODEL, reachable: true };
