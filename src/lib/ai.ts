@@ -1,22 +1,50 @@
-// Groq API - Final production version (2026)
+// Groq API - Final version with correct 2026 models
 const KEY: string = process.env.GROQ_API_KEY || "";
 const URL_CHAT = "https://api.groq.com/openai/v1/chat/completions";
+const URL_MODELS = "https://api.groq.com/openai/v1/models";
 
 export interface ChatMessage { role: "system" | "user" | "assistant"; content: string; }
 export interface AiStatus { configured: boolean; model: string; reachable: boolean; error?: string; }
 
 const SYSTEM_PERSONA = "Be concise and helpful. Answer in the user's language.";
 
-// قائمة النماذج المتاحة حالياً في Groq (محدثة)
+// النماذج المتاحة حالياً في Groq (نوفمبر 2026)
 const MODELS: string[] = [
-  "llama-3.3-70b-versatile",
-  "llama-3.1-8b-instant",
-  "mixtral-8x7b-32768",
+  "llama-3.3-70b-specdec",
   "gemma2-9b-it",
-  "deepseek-r1-distill-llama-70b"
+  "deepseek-r1-distill-llama-70b",
+  "qwen-qwq-32b",
+  "llama-3.1-8b-instant"
 ];
 
 let CURRENT_MODEL: string = MODELS[0];
+let availableModels: string[] = [];
+
+// جلب النماذج المتاحة من Groq
+async function fetchAvailableModels(): Promise<void> {
+  if (!KEY || availableModels.length > 0) return;
+  try {
+    const res = await fetch(URL_MODELS, {
+      headers: { "Authorization": `Bearer ${KEY}` }
+    });
+    if (res.ok) {
+      const data = await res.json() as any;
+      availableModels = (data.data || []).map((m: any) => m.id as string);
+      console.log(`[AI] Available models: ${availableModels.length}`);
+      
+      // اختر أول نموذج متاح من القائمة المفضلة
+      for (const model of MODELS) {
+        if (availableModels.includes(model)) {
+          CURRENT_MODEL = model;
+          console.log(`[AI] Selected: ${CURRENT_MODEL}`);
+          break;
+        }
+      }
+    }
+  } catch (e) {
+    console.log("[AI] Using default model list");
+  }
+}
 
 const cache = new Map<string, { response: string; time: number }>();
 const CACHE_TTL = 10 * 60 * 1000;
@@ -25,8 +53,11 @@ function getCacheKey(messages: ChatMessage[]): string {
   return messages.map(m => `${m.role}:${m.content}`).join("|");
 }
 
-export async function askAI(messages: ChatMessage[], maxTokens: number = 512, retries: number = 2): Promise<string> {
+export async function askAI(messages: ChatMessage[], maxTokens: number = 512, retries: number = 3): Promise<string> {
   if (!KEY) throw new Error("GROQ_API_KEY is not set");
+  
+  // جلب النماذج المتاحة أول مرة
+  await fetchAvailableModels();
   
   const cacheKey = getCacheKey(messages);
   const cached = cache.get(cacheKey);
@@ -67,11 +98,12 @@ export async function askAI(messages: ChatMessage[], maxTokens: number = 512, re
         const t = await res.text().catch(() => "");
         const err = new Error(`Groq ${res.status}: ${t.slice(0, 200)}`);
         
+        // إذا النموذج غير موجود، جرب التالي
         if ((res.status === 400 || res.status === 404) && attempt < retries) {
           const currentIndex = MODELS.indexOf(CURRENT_MODEL);
           if (currentIndex < MODELS.length - 1) {
             CURRENT_MODEL = MODELS[currentIndex + 1];
-            console.log(`[AI] Switching to model: ${CURRENT_MODEL}`);
+            console.log(`[AI] Switching to: ${CURRENT_MODEL}`);
             lastError = err;
             continue;
           }
