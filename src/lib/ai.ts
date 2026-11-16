@@ -11,7 +11,7 @@ const MODELS: string[] = [
   "llama-3.1-8b-instant"
 ];
 
-let CURRENT_MODEL: string = process.env.AI_MODEL || MODELS[0];
+let CURRENT_MODEL: string = process.env.AI_MODEL || MODELS[0] || "llama-3.3-70b-versatile";
 
 export interface ChatMessage { role: "system" | "user" | "assistant"; content: string; }
 export interface AiStatus { configured: boolean; model: string; reachable: boolean; error?: string; }
@@ -70,7 +70,7 @@ export async function askAI(messages: ChatMessage[], maxTokens: number = 512, re
         if (res.status === 404 && attempt === 0) {
           const currentIndex = MODELS.indexOf(CURRENT_MODEL);
           if (currentIndex < MODELS.length - 1) {
-            CURRENT_MODEL = MODELS[currentIndex + 1];
+            CURRENT_MODEL = MODELS[currentIndex + 1] ?? CURRENT_MODEL;
             console.log(`[AI] Switching to model: ${CURRENT_MODEL}`);
             lastError = err;
             continue;
