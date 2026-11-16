@@ -1,4 +1,4 @@
-// Groq API - Final version with correct 2026 models
+// Groq API - Dynamic model selection (2026)
 const KEY: string = process.env.GROQ_API_KEY || "";
 const URL_CHAT = "https://api.groq.com/openai/v1/chat/completions";
 const URL_MODELS = "https://api.groq.com/openai/v1/models";
@@ -8,41 +8,44 @@ export interface AiStatus { configured: boolean; model: string; reachable: boole
 
 const SYSTEM_PERSONA = "Be concise and helpful. Answer in the user's language.";
 
-// النماذج المتاحة حالياً في Groq (نوفمبر 2026)
-const MODELS: string[] = [
-  "llama-3.3-70b-specdec",
-  "gemma2-9b-it",
-  "deepseek-r1-distill-llama-70b",
-  "qwen-qwq-32b",
-  "llama-3.1-8b-instant"
-];
+let CURRENT_MODEL: string = "";
+let modelsFetched = false;
 
-let CURRENT_MODEL: string = MODELS[0];
-let availableModels: string[] = [];
-
-// جلب النماذج المتاحة من Groq
-async function fetchAvailableModels(): Promise<void> {
-  if (!KEY || availableModels.length > 0) return;
+// جلب النماذج المتاحة من Groq واختيار أول واحد صالح
+async function selectWorkingModel(): Promise<string> {
+  if (!KEY) throw new Error("GROQ_API_KEY is not set");
+  
+  if (modelsFetched && CURRENT_MODEL) return CURRENT_MODEL;
+  
   try {
     const res = await fetch(URL_MODELS, {
       headers: { "Authorization": `Bearer ${KEY}` }
     });
-    if (res.ok) {
-      const data = await res.json() as any;
-      availableModels = (data.data || []).map((m: any) => m.id as string);
-      console.log(`[AI] Available models: ${availableModels.length}`);
-      
-      // اختر أول نموذج متاح من القائمة المفضلة
-      for (const model of MODELS) {
-        if (availableModels.includes(model)) {
-          CURRENT_MODEL = model;
-          console.log(`[AI] Selected: ${CURRENT_MODEL}`);
-          break;
-        }
-      }
+    
+    if (!res.ok) {
+      throw new Error(`Failed to fetch models: ${res.status}`);
     }
+    
+    const data = await res.json() as any;
+    const availableModels: string[] = (data.data || [])
+      .map((m: any) => m.id as string)
+      .filter((id: string) => id.includes("llama") || id.includes("mixtral") || id.includes("gemma") || id.includes("deepseek") || id.includes("qwen"));
+    
+    console.log(`[AI] Found ${availableModels.length} available models`);
+    
+    if (availableModels.length === 0) {
+      throw new Error("No suitable models available");
+    }
+    
+    // اختر أول نموذج متاح
+    CURRENT_MODEL = availableModels[0];
+    console.log(`[AI] Selected model: ${CURRENT_MODEL}`);
+    modelsFetched = true;
+    
+    return CURRENT_MODEL;
   } catch (e) {
-    console.log("[AI] Using default model list");
+    console.error("[AI] Error fetching models:", e);
+    throw e;
   }
 }
 
@@ -53,11 +56,11 @@ function getCacheKey(messages: ChatMessage[]): string {
   return messages.map(m => `${m.role}:${m.content}`).join("|");
 }
 
-export async function askAI(messages: ChatMessage[], maxTokens: number = 512, retries: number = 3): Promise<string> {
+export async function askAI(messages: ChatMessage[], maxTokens: number = 512, retries: number = 2): Promise<string> {
   if (!KEY) throw new Error("GROQ_API_KEY is not set");
   
-  // جلب النماذج المتاحة أول مرة
-  await fetchAvailableModels();
+  // جلب النموذج الصالح أولاً
+  const model = await selectWorkingModel();
   
   const cacheKey = getCacheKey(messages);
   const cached = cache.get(cacheKey);
@@ -66,7 +69,7 @@ export async function askAI(messages: ChatMessage[], maxTokens: number = 512, re
   }
   
   const body = JSON.stringify({
-    model: CURRENT_MODEL,
+    model: model,
     messages: [
       { role: "system", content: SYSTEM_PERSONA },
       ...messages.map(m => ({ role: m.role, content: m.content })),
@@ -97,17 +100,6 @@ export async function askAI(messages: ChatMessage[], maxTokens: number = 512, re
       if (!res.ok) {
         const t = await res.text().catch(() => "");
         const err = new Error(`Groq ${res.status}: ${t.slice(0, 200)}`);
-        
-        // إذا النموذج غير موجود، جرب التالي
-        if ((res.status === 400 || res.status === 404) && attempt < retries) {
-          const currentIndex = MODELS.indexOf(CURRENT_MODEL);
-          if (currentIndex < MODELS.length - 1) {
-            CURRENT_MODEL = MODELS[currentIndex + 1];
-            console.log(`[AI] Switching to: ${CURRENT_MODEL}`);
-            lastError = err;
-            continue;
-          }
-        }
         
         if (res.status === 429 || res.status >= 500) {
           lastError = err;
@@ -146,10 +138,11 @@ export async function askAI(messages: ChatMessage[], maxTokens: number = 512, re
 export async function getAiStatus(): Promise<AiStatus> {
   const configured: boolean = Boolean(KEY);
   try {
+    modelsFetched = false; // إعادة جلب النماذج
     await askAI([{ role: "user", content: "Say ping" }], 200);
     return { configured, model: CURRENT_MODEL, reachable: true };
   } catch (e: any) {
-    return { configured, model: CURRENT_MODEL, reachable: false, error: String(e?.message ?? e) };
+    return { configured, model: CURRENT_MODEL || "unknown", reachable: false, error: String(e?.message ?? e) };
   }
 }
 
