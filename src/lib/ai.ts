@@ -1,7 +1,18 @@
-// Groq API - Free, fast, no quota issues
-const MODEL = process.env.AI_MODEL || "llama-3.1-70b-versatile";
-const KEY = process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY || "";
+// Groq API with fallback models
+const KEY = process.env.GROQ_API_KEY || "";
 const URL_CHAT = "https://api.groq.com/openai/v1/chat/completions";
+
+// قائمة النماذج بالترتيب (الأفضل أولاً)
+const MODELS = [
+  "llama-3.3-70b-versatile",
+  "llama-3.1-70b-versatile", 
+  "llama3-70b-8192",
+  "mixtral-8x7b-32768",
+  "gemma2-9b-it",
+  "llama-3.1-8b-instant"
+];
+
+let CURRENT_MODEL = MODELS[0];
 
 export interface ChatMessage { role: "system" | "user" | "assistant"; content: string; }
 export interface AiStatus { configured: boolean; model: string; reachable: boolean; error?: string; }
@@ -25,7 +36,7 @@ export async function askAI(messages: ChatMessage[], maxTokens = 512, retries = 
   }
   
   const body = JSON.stringify({
-    model: MODEL,
+    model: CURRENT_MODEL,
     messages: [
       { role: "system", content: SYSTEM_PERSONA },
       ...messages.map(m => ({ role: m.role, content: m.content })),
@@ -57,11 +68,21 @@ export async function askAI(messages: ChatMessage[], maxTokens = 512, retries = 
         const t = await res.text().catch(() => "");
         const err = new Error(`Groq ${res.status}: ${t.slice(0, 200)}`);
         
+        // إذا النموذج ما لقييناه، جرب النموذج التالي
+        if (res.status === 404 && attempt === 0) {
+          const currentIndex = MODELS.indexOf(CURRENT_MODEL);
+          if (currentIndex < MODELS.length - 1) {
+            CURRENT_MODEL = MODELS[currentIndex + 1];
+            console.log(`[AI] Switching to model: ${CURRENT_MODEL}`);
+            lastError = err;
+            continue;
+          }
+        }
+        
         if (res.status === 429 || res.status >= 500) {
           lastError = err;
           if (attempt < retries) {
             const wait = 2000 * Math.pow(2, attempt);
-            console.log(`[AI] Retry ${attempt + 1}/${retries} after ${wait}ms`);
             await new Promise(r => setTimeout(r, wait));
             continue;
           }
@@ -82,7 +103,6 @@ export async function askAI(messages: ChatMessage[], maxTokens = 512, retries = 
       lastError = e;
       if (attempt < retries && (e.name === "AbortError" || e.message.includes("429") || e.message.includes("5"))) {
         const wait = 2000 * Math.pow(2, attempt);
-        console.log(`[AI] Retry ${attempt + 1}/${retries} after ${wait}ms`);
         await new Promise(r => setTimeout(r, wait));
         continue;
       }
@@ -97,9 +117,9 @@ export async function getAiStatus(): Promise<AiStatus> {
   const configured = Boolean(KEY);
   try {
     await askAI([{ role: "user", content: "Say ping" }], 200);
-    return { configured, model: MODEL, reachable: true };
+    return { configured, model: CURRENT_MODEL, reachable: true };
   } catch (e: any) {
-    return { configured, model: MODEL, reachable: false, error: String(e?.message ?? e) };
+    return { configured, model: CURRENT_MODEL, reachable: false, error: String(e?.message ?? e) };
   }
 }
 
