@@ -5,7 +5,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=18.17"
+    "node": ">=18"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -15,7 +15,8 @@
     "register-commands:guild": "node --loader ts-node/esm scripts/register-commands.ts --guild",
     "gateway": "node --loader ts-node/esm src/gateway/bot.ts",
     "gateway:build": "tsc -p tsconfig.json && node dist/gateway/bot.js",
-    "dev:vercel": "vercel dev"
+    "dev:vercel": "vercel dev",
+    "start": "tsx src/main.ts"
   },
   "dependencies": {
     "@vercel/functions": "^1.5.0",
